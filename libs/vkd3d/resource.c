@@ -5915,6 +5915,43 @@ static uint32_t vkd3d_memory_info_find_global_mask(const struct vkd3d_memory_top
     return ~mask;
 }
 
+static void vkd3d_memory_info_init_budgets(struct vkd3d_memory_info *info,
+        const struct vkd3d_memory_topology *topology,
+        struct d3d12_device *device)
+{
+    VkMemoryPropertyFlags flags;
+    uint32_t heap_index;
+    uint32_t i;
+
+    info->budget_sensitive_mask = 0;
+
+    /* Nothing to do if we don't have separate heaps. */
+    if (topology->device_local_heap_count == 0 || topology->host_only_heap_count == 0)
+        return;
+    if (!topology->exists_device_only_type || !topology->exists_host_only_type)
+        return;
+
+    for (i = 0; i < device->memory_properties.memoryTypeCount; i++)
+    {
+        const VkMemoryPropertyFlags pinned_mask = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        flags = device->memory_properties.memoryTypes[i].propertyFlags;
+        heap_index = device->memory_properties.memoryTypes[i].heapIndex;
+
+        if ((flags & pinned_mask) == pinned_mask && heap_index == topology->largest_device_local_heap_index)
+        {
+            /* Limit this type. This limit is a pure heuristic and we might need further tuning here.
+             * If there's a separate heap type for PCI-e BAR,
+             * don't bother limiting it since the size is already going to be tiny.
+             * The driver will limit us naturally. */
+            info->budget_sensitive_mask |= 1u << i;
+            info->type_budget[i] = device->memory_properties.memoryHeaps[heap_index].size / 16;
+            info->type_current[i] = 0;
+        }
+    }
+}
+
 void vkd3d_memory_info_cleanup(struct vkd3d_memory_info *info,
         struct d3d12_device *device)
 {
@@ -5935,6 +5972,7 @@ HRESULT vkd3d_memory_info_init(struct vkd3d_memory_info *info,
 
     vkd3d_memory_info_get_topology(&topology, device);
     info->global_mask = vkd3d_memory_info_find_global_mask(&topology, device);
+    vkd3d_memory_info_init_budgets(info, &topology, device);
 
     if (pthread_mutex_init(&info->budget_lock, NULL) != 0)
         return E_OUTOFMEMORY;
