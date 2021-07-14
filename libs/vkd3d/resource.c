@@ -5901,7 +5901,7 @@ static uint32_t vkd3d_memory_info_find_global_mask(const struct vkd3d_memory_top
         const VkMemoryPropertyFlags pinned_mask = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         flags = device->memory_properties.memoryTypes[i].propertyFlags;
-        heap_index = device->memory_properties.memoryTypes[i].propertyFlags;
+        heap_index = device->memory_properties.memoryTypes[i].heapIndex;
 
         if (heap_index != topology->largest_device_local_heap_index &&
             heap_index != topology->largest_host_only_heap_index &&
